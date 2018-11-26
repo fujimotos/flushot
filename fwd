@@ -23,8 +23,6 @@ import getopt
 import msgpack
 import datetime as dt
 
-VERSION = "0.1"
-
 def log(*args):
     print(dt.datetime.now(), *args, file=sys.stderr)
 
@@ -87,7 +85,7 @@ def main():
     multi = 10
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hVn:m:t:')
+        opts, args = getopt.getopt(sys.argv[1:], 'hn:m:t:')
     except getopt.GetoptError as e:
         print('error: %s\n' % e, file=sys.stderr)
         usage()
@@ -96,9 +94,6 @@ def main():
     for k, v in opts:
         if k == '-h':
             usage()
-            return
-        elif k == '-V':
-            print(VERSION, file=sys.stderr)
             return
         elif k == '-n':
             num = int(v)
