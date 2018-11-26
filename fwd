@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 
-"""Usage: efc [-h] [-t tag] [host:port]
+"""Usage: fwd [-h] [-n num] [-P pck] [-t tag] [host:port]
 
 Options
 
   host    Host of the remote server to connect to <localhost>
   port   .Port to connect to the remote server <24224>
   -t tag  Set a tag name attached to payloads <debug.log>
-  -S      Write the transferred data to stdout too (tee mode)
-  -h      Show the help message and quit
-  -V      Show the version number and quit
+  -n num  Send N data records <10000>
+  -m num  Send (at-most) M records in a single request <10>
 
 Examples
 
-  $ cat data.txt | efc -t app.log localhost:24224
+  $ echo '{"foo":"bar"}' | fwd -n 10000 -t app.log localhost:24224
 """
 
 import sys
@@ -21,12 +20,13 @@ import socket
 import time
 import json
 import getopt
-import datetime
+import msgpack
+import datetime as dt
 
 VERSION = "0.1"
 
-def err(*args):
-    print(datetime.datetime.now(), *args, file=sys.stderr)
+def log(*args):
+    print(dt.datetime.now(), *args, file=sys.stderr)
 
 def unixtime():
     return int(time.time())
@@ -44,7 +44,7 @@ class ForwardClient:
             try:
                 return socket.create_connection(addr)
             except OSError:
-                err('cannot connect to %s:%s. retry in 1s' % addr)
+                log('cannot connect to %s:%s. retry in 1s' % addr)
                 time.sleep(1)
 
     def send(self, data):
@@ -60,7 +60,7 @@ class ForwardClient:
                     raise OSError
                 sent += nbytes
             except OSError as e:
-                err('error occured during transmission <%s>. will resend' % e)
+                log('error occured during transmission <%s>. will resend' % e)
                 self.close()
                 sent = 0
 
@@ -69,6 +69,13 @@ class ForwardClient:
             self.sock.close()
             self.sock = None
 
+def parse_input(s):
+    s = s.strip()
+    try:
+        return json.loads(s)
+    except json.decoder.JSONDecodeError:
+        return {'message': s}
+
 def usage():
     print(__doc__, file=sys.stderr)
 
@@ -76,10 +83,11 @@ def main():
     host = 'localhost'
     port = 24224
     tag = 'debug.log'
-    stdout = False
+    num = 10000
+    multi = 10
 
     try:
-        opts, args = getopt.getopt(sys.argv[1:], 'hSt:VX')
+        opts, args = getopt.getopt(sys.argv[1:], 'hVn:m:t:')
     except getopt.GetoptError as e:
         print('error: %s\n' % e, file=sys.stderr)
         usage()
@@ -92,14 +100,12 @@ def main():
         elif k == '-V':
             print(VERSION, file=sys.stderr)
             return
+        elif k == '-n':
+            num = int(v)
+        elif k == '-m':
+            multi = int(v)
         elif k == '-t':
             tag = v
-        elif k == '-S':
-            stdout = True
-
-    if sys.stdin.isatty():
-        usage()
-        return 1
 
     if args:
         if ':' in args[0]:
@@ -109,18 +115,28 @@ def main():
         else:
             host = args[0]
 
-    clt = ForwardClient(host, port)
+    if sys.stdin.isatty():
+        usage()
+        return 1
 
-    for line in sys.stdin:
-        line = line.rstrip('\n')
+    msg = parse_input(sys.stdin.read())
 
-        payload = json.dumps([tag, unixtime(), {'message': line}])
+    fc = ForwardClient(host, port)
 
-        clt.send(payload.encode())
-        if stdout:
-            print(payload)
+    log("run (n=%s, m=%s)" % (num, multi))
+    t0 = time.time()
 
-    clt.close()
+    sent = 0
+    while sent < num:
+        dup = min(multi, num - sent)
+        data = [tag, [[unixtime(), msg]] * dup]
+        fc.send(msgpack.dumps(data))
+        sent += dup
+    fc.close()
+
+    dt = time.time() - t0
+    eps = num / dt
+    log("done (%.2f sec / %i eps)" % (dt, eps))
 
 if __name__ == '__main__':
     sys.exit(main())
