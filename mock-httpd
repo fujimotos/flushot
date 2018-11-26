@@ -1,0 +1,31 @@
+#!/usr/bin/env python3
+
+import sys
+from http.server import BaseHTTPRequestHandler
+from http.server import HTTPServer
+
+class HTTPHandler(BaseHTTPRequestHandler):
+
+    def do_GET(self, *args):
+        self.send_response(200, "OK")
+        self.end_headers()
+
+    def do_HEAD(self, *args):
+        self.send_response(200, "OK")
+        self.end_headers()
+
+    def do_POST(self, *args):
+        length = self.headers.get('content-length')
+        data = self.rfile.read(int(length))
+
+        self.send_response(200, "OK")
+        self.end_headers()
+
+def main():
+    sys.stderr.write('Serving HTTP on 9200\n')
+    server_address = ('', 9200)
+    httpd = HTTPServer(server_address, HTTPHandler)
+    httpd.serve_forever()
+
+if __name__ == '__main__':
+    main()
