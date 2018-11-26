@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+
+"""Usage: efc [-h] [-t tag] [host:port]
+
+Options
+
+  host    Host of the remote server to connect to <localhost>
+  port   .Port to connect to the remote server <24224>
+  -t tag  Set a tag name attached to payloads <debug.log>
+  -S      Write the transferred data to stdout too (tee mode)
+  -h      Show the help message and quit
+  -V      Show the version number and quit
+
+Examples
+
+  $ cat data.txt | efc -t app.log localhost:24224
+"""
+
+import sys
+import socket
+import time
+import json
+import getopt
+import datetime
+
+VERSION = "0.1"
+
+def err(*args):
+    print(datetime.datetime.now(), *args, file=sys.stderr)
+
+def unixtime():
+    return int(time.time())
+
+class ForwardClient:
+
+    def __init__(self, host, port):
+        self.host = host
+        self.port = port
+        self.sock = None
+
+    def connect(self):
+        addr = (self.host, self.port)
+        while 1:
+            try:
+                return socket.create_connection(addr)
+            except OSError:
+                err('cannot connect to %s:%s. retry in 1s' % addr)
+                time.sleep(1)
+
+    def send(self, data):
+        total = len(data)
+        sent = 0
+
+        while sent < total:
+            if self.sock is None:
+                self.sock = self.connect()
+            try:
+                nbytes = self.sock.send(data[sent:])
+                if nbytes == 0:
+                    raise OSError
+                sent += nbytes
+            except OSError as e:
+                err('error occured during transmission <%s>. will resend' % e)
+                self.close()
+                sent = 0
+
+    def close(self):
+        if self.sock:
+            self.sock.close()
+            self.sock = None
+
+def usage():
+    print(__doc__, file=sys.stderr)
+
+def main():
+    host = 'localhost'
+    port = 24224
+    tag = 'debug.log'
+    stdout = False
+
+    try:
+        opts, args = getopt.getopt(sys.argv[1:], 'hSt:VX')
+    except getopt.GetoptError as e:
+        print('error: %s\n' % e, file=sys.stderr)
+        usage()
+        return 1
+
+    for k, v in opts:
+        if k == '-h':
+            usage()
+            return
+        elif k == '-V':
+            print(VERSION, file=sys.stderr)
+            return
+        elif k == '-t':
+            tag = v
+        elif k == '-S':
+            stdout = True
+
+    if sys.stdin.isatty():
+        usage()
+        return 1
+
+    if args:
+        if ':' in args[0]:
+            tmp = args[0].rsplit(':', maxsplit=1)
+            host = tmp[0]
+            port = int(tmp[1])
+        else:
+            host = args[0]
+
+    clt = ForwardClient(host, port)
+
+    for line in sys.stdin:
+        line = line.rstrip('\n')
+
+        payload = json.dumps([tag, unixtime(), {'message': line}])
+
+        clt.send(payload.encode())
+        if stdout:
+            print(payload)
+
+    clt.close()
+
+if __name__ == '__main__':
+    sys.exit(main())
