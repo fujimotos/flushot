@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Usage: fwd [-h] [-n num] [-P pck] [-t tag] [host:port]
+"""Usage: flushot-bench [-h] [-n num] [-t tag] [host:port]
 
 Options
 
@@ -12,7 +12,11 @@ Options
 
 Examples
 
-  $ echo '{"foo":"bar"}' | fwd -n 10000 -t app.log localhost:24224
+  $ flushot-bench -n 100000 -t debug.log localhost:24224
+
+  How to send custom records
+
+  $ echo '{"foo":"bar"}' | flushot-bench -n 10000 -t app.log localhost:24224
 """
 
 import sys
