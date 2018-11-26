@@ -111,10 +111,9 @@ def main():
             host = args[0]
 
     if sys.stdin.isatty():
-        usage()
-        return 1
-
-    msg = parse_input(sys.stdin.read())
+        msg = {'message': 'dummy'}
+    else:
+        msg = parse_input(sys.stdin.read())
 
     fc = ForwardClient(host, port)
 
